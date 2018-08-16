@@ -18,6 +18,7 @@ package com.example.android.quakereport;
 import android.content.Intent;
 import android.media.MediaPlayer;
 import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 import android.view.View;
@@ -26,26 +27,30 @@ import android.widget.ArrayAdapter;
 import android.widget.ListView;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class EarthquakeActivity extends AppCompatActivity {
 
+    private static final String USGS_REQUEST_URL =
+            "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&orderby=time&minmag=6&limit=10";
+
     public static final String LOG_TAG = EarthquakeActivity.class.getName();
+
+    private QuakeAdapter quakeAdapter;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.earthquake_activity);
-
-        final ArrayList<QuakeItem> quakeList;
-
-        quakeList = QueryUtils.extractEarthquakes();
+        EarthquakeAsyncTask task = new EarthquakeAsyncTask();
+        task.execute(USGS_REQUEST_URL);
 
         // Create a fake list of earthquake locations.
         // Find a reference to the {@link ListView} in the layout
         ListView earthquakeListView = (ListView) findViewById(R.id.list);
 
         // Create a new {@link ArrayAdapter} of earthquakes
-        QuakeAdapter quakeAdapter = new QuakeAdapter(this, quakeList);
+        quakeAdapter = new QuakeAdapter(this, new ArrayList<QuakeItem>());
         // Set the adapter on the {@link ListView}
         // so the list can be populated in the user interface
         earthquakeListView.setAdapter(quakeAdapter);
@@ -53,7 +58,7 @@ public class EarthquakeActivity extends AppCompatActivity {
         earthquakeListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> adapterView, View view, int position, long l) {
-                QuakeItem quakeItem = quakeList.get(position);
+                QuakeItem quakeItem = quakeAdapter.getItem(position);
                 String url = quakeItem.getUrl();
                 Intent i = new Intent(Intent.ACTION_VIEW);
                 i.setData(Uri.parse(url));
@@ -61,4 +66,35 @@ public class EarthquakeActivity extends AppCompatActivity {
             }
         });
     }
-}
+
+    private class EarthquakeAsyncTask extends AsyncTask<String, Void, List<QuakeItem>> {
+
+        @Override
+        protected List<QuakeItem> doInBackground(String... urls) {
+            // Don't perform the request if there are no URLs, or the first URL is null.
+            if (urls.length < 1 || urls[0] == null) {
+                return null;
+            }
+
+            List<QuakeItem> result = QueryUtils.fetchEarthquakeData(urls[0]);
+            return result;
+
+        }
+
+        @Override
+        protected void onPostExecute(List<QuakeItem> data) {
+            // Clear the adapter of previous earthquake data
+            quakeAdapter.clear();
+
+            // If there is a valid list of {@link Earthquake}s, then add them to the adapter's
+            // data set. This will trigger the ListView to update.
+            if (data != null && !data.isEmpty()) {
+                quakeAdapter.addAll(data);
+            }
+        }
+
+        }
+    }
+
+
+
